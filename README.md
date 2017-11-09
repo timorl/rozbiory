@@ -28,6 +28,7 @@ $ bin/rho
 
 The command waits for input in the form of a json file containing two records -- `"mainSet"` and `"family"`.
 The first one should contain a list of integers that will be treated as a set, and the second one a list of lists that should be subsets of `mainSet`.
+Example files with such contents can be found in the `test/` directory.
 
 Usually one wants to run the command with a file as the input and output:
 
