@@ -1,6 +1,6 @@
 # Rozbiory
 
-A simple program for checking one specificoperation on sets.
+A simple program for checking one specific operation on sets.
 
 ## Compilation
 
@@ -34,4 +34,11 @@ Usually one wants to run the command with a file as the input and output:
 
 ```sh
 $ bin/rho < input.json > output.txt
+```
+
+The program also takes one optional argument specifying the maximum number of steps to perform. If the argument is not present the default number of steps is 100000.
+To run the program with the maximum number of steps set to, for example, 100 type:
+
+```sh
+$ bin/rho 100 < input.json > output.txt
 ```

@@ -2,11 +2,12 @@
 #include<set>
 #include<tuple>
 #include<cstdlib>
+#include<string>
 
 #include"nlohmann/json.hpp"
 using json = nlohmann::json;
 
-const int MAX_STEPS = 100000;
+const long long DEFAULT_MAX_STEPS = 100000;
 
 template<typename T>
 class Rho {
@@ -115,19 +116,23 @@ class Rho {
 		Set mainSet;
 };
 
-int main() {
+int main(int argc, char * argv[]) {
+	long long maxSteps = DEFAULT_MAX_STEPS;
+	if (argc > 1) {
+		maxSteps = std::stoll(argv[1]);
+	}
 	json input;
 	std::cin >> input;
 	Rho<int> rho(input["mainSet"]);
  bool done = false;
 	auto family = rho.toFamily(input["family"]);
-	int steps = 0;
+	long long steps = 0;
 	while (!done) {
 		std::cout << "=== Step " << steps << " ===" << std::endl;
 		std::cout << json(family) << std::endl;
 		std::tie(done, family) = rho.step(family);
 		steps++;
-		if (steps > MAX_STEPS) {
+		if (steps > maxSteps) {
 			std::cout << "Maximum number of steps exceeded, stopping." << std::endl;
 			return 0;
 		}
