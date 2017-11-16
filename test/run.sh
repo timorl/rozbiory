@@ -20,7 +20,6 @@ for IN_FILE in $IN_DIR/*.json; do
 		echo "$DIFF"
 		echo -e "Test $IN_FILE \e[5m\e[91mFAILED\e[39m\e[25m!"
 	fi
-	rm $OUT_FILE.tmp
 done
 
 if [[ $ALL_FILES == $CORRECT ]]; then

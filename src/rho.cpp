@@ -1,5 +1,5 @@
 #include<iostream>
-#include<set>
+#include<unordered_set>
 #include<tuple>
 #include<cstdlib>
 #include<string>
@@ -10,111 +10,114 @@ using json = nlohmann::json;
 const long long DEFAULT_MAX_STEPS = 100000;
 
 template<typename T>
-class Rho {
+class FiniteSet : public std::unordered_set<T> {
 	public:
-		using Set = std::set<T>;
-		using Family = std::set<Set>;
-
-		Rho(json mainSetJson) {
-			mainSet = toSet(mainSetJson);
-			if (mainSet.size() == 0) {
-				std::cout << "Empty main set is not allowed, sorry." << std::endl;
-				std::exit(0);
-			}
+		FiniteSet<T> operator|(FiniteSet<T> const & other) const {
+			FiniteSet<T> result;
+			result.insert(this->cbegin(), this->cend());
+			result.insert(other.cbegin(), other.cend());
+			return result;
 		}
 
-		Set toSet(const json & j) {
-			Set result;
-			for (const T & e : j) {
-				result.insert(e);
+		FiniteSet<T> operator&(FiniteSet<T> const & other) const {
+			FiniteSet<T> result;
+			for (auto it = this->cbegin(); it != this->cend(); it++) {
+				if (other.count(*it) > 0) {
+					result.insert(*it);
+				}
 			}
 			return result;
 		}
 
-		Family toFamily(const json & j) {
-			Family result;
-			for (const json & ij : j) {
-				result.insert(toSet(ij));
+		FiniteSet<T> operator-(FiniteSet<T> const & other) const {
+			FiniteSet<T> result;
+			for (auto it = this->cbegin(); it != this->cend(); it++) {
+				if (other.count(*it) == 0) {
+					result.insert(*it);
+				}
 			}
 			return result;
 		}
+};
 
-		std::tuple<bool, Family> step(const Family & family) {
+namespace std {
+	template<typename T> struct hash<std::unordered_set<T>> {
+		std::size_t operator()(std::unordered_set<T> const & us) const noexcept {
+			std::size_t result = 0;
+			for (T const & e : us) {
+				result = std::hash<T>{}(e) + result;
+			}
+			return result;
+		}
+	};
+	template<typename T> struct hash<FiniteSet<T>> {
+		std::size_t operator()(FiniteSet<T> const & fs) const noexcept {
+			return std::hash<std::unordered_set<T>>{}(static_cast<std::unordered_set<T>>(fs));
+		}
+	};
+}
+
+template<typename T>
+class SigmaClass {
+	public:
+		using Set = FiniteSet<T>;
+		using Family = FiniteSet<Set>;
+
+		bool step() {
+			bool anyNew = false;
 			Family result;
+			result.insert(family.begin(), family.end());
 			for (auto s1 = family.begin(); s1 != family.end(); s1++) {
 				const Set & set1 = *s1;
-				result.insert(complement(set1));
+				bool inserted;
+				std::tie(std::ignore, inserted) = result.insert(complement(set1));
+				anyNew |= inserted;
 				for (auto s2 = std::next(s1); s2 != family.end(); s2++) {
 					const Set & set2 = *s2;
-					if (disjoint(set1, set2)) {
-						result.insert(sum(set1, set2));
+					if ((set1 & set2).empty()) {
+						std::tie(std::ignore, inserted) = result.insert(set1 | set2);
+						anyNew |= inserted;
 					}
 				}
 			}
-			return std::make_tuple(equal(family, result), result);
+			family = result;
+			return anyNew;
+		}
+
+		void setMainSet(Set ms) {
+			mainSet = ms;
+		}
+
+		void setFamily(Family f) {
+			family = f;
+		}
+
+		Set const & getMainSet() const {
+			return mainSet;
+		}
+
+		Family const & getFamily() const {
+			return family;
 		}
 	private:
-		Set complement(const Set & s) {
-			Set result;
-			for (const T & e : mainSet) {
-				if (s.count(e) == 0) {
-					result.insert(e);
-				}
-			}
-			return result;
-		}
-
-		Set sum(const Set & s1, const Set & s2) {
-			Set result;
-			result.insert(s1.begin(), s1.end());
-			result.insert(s2.begin(), s2.end());
-			return result;
-		}
-
-		bool disjoint(const Set & s1, const Set & s2) {
-			for (const T & e : s1) {
-				if (s2.count(e) > 0) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		bool equal(const Set & s1, const Set & s2) {
-			if (s1.size() != s2.size()) {
-				return false;
-			}
-
-			for (const T & e : s1) {
-				if (s2.count(e) == 0) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		bool equal(const Family & f1, const Family & f2) {
-			if (f1.size() != f2.size()) {
-				return false;
-			}
-
-			for (const Set & s1 : f1) {
-				bool found = false;
-				for (const Set & s2 : f2) {
-					if (equal(s1,s2)) {
-						found = true;
-						break;
-					}
-				}
-				if (!found) {
-					return false;
-				}
-			}
-			return true;
+		Set complement(Set const & s) {
+			return mainSet-s;
 		}
 
 		Set mainSet;
+		Family family;
 };
+
+template<typename T>
+void to_json(json & j, SigmaClass<T> const & sc) {
+	j = {{"mainSet", sc.getMainSet()}, {"family", sc.getFamily()}};
+}
+
+template<typename T>
+void from_json(json const & j, SigmaClass<T> & sc) {
+	sc.setMainSet(j.at("mainSet"));
+	sc.setFamily(j.at("family"));
+}
 
 int main(int argc, char * argv[]) {
 	long long maxSteps = DEFAULT_MAX_STEPS;
@@ -123,20 +126,17 @@ int main(int argc, char * argv[]) {
 	}
 	json input;
 	std::cin >> input;
-	Rho<int> rho(input["mainSet"]);
- bool done = false;
-	auto family = rho.toFamily(input["family"]);
+	SigmaClass<int> rho = input;
 	long long steps = 0;
-	while (!done) {
+	do {
 		std::cout << "=== Step " << steps << " ===" << std::endl;
-		std::cout << json(family) << std::endl;
-		std::tie(done, family) = rho.step(family);
+		std::cout << json(rho.getFamily()) << std::endl;
 		steps++;
 		if (steps > maxSteps) {
 			std::cout << "Maximum number of steps exceeded, stopping." << std::endl;
 			return 0;
 		}
-	}
+	} while (rho.step());
 	std::cout << "=== Step " << steps << " changes nothing. ===" << std::endl;
 	return 0;
 }
