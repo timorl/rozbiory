@@ -12,7 +12,7 @@ for IN_FILE in $IN_DIR/*.json; do
 	let "ALL_FILES++"
 	echo "Running test $ALL_FILES: $IN_FILE."
 	OUT_FILE=$OUT_DIR/$(basename $IN_FILE)
-	$RHO_BINARY < $IN_FILE > $OUT_FILE.tmp
+	$RHO_BINARY < $IN_FILE > $OUT_FILE.tmp 2>&1
 	DIFF=$(diff $OUT_FILE $OUT_FILE.tmp)
 	if [[ -z $DIFF ]]; then
 		let "CORRECT++"

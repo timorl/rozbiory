@@ -1,13 +1,16 @@
 #include<iostream>
 #include<unordered_set>
+#include<map>
 #include<tuple>
 #include<cstdlib>
 #include<string>
+#include<bitset>
 
 #include"nlohmann/json.hpp"
 using json = nlohmann::json;
 
 const long long DEFAULT_MAX_STEPS = 100000;
+const long long MAX_MAIN_SET_SIZE = 1000;
 
 template<typename T>
 class FiniteSet : public std::unordered_set<T> {
@@ -60,21 +63,23 @@ namespace std {
 template<typename T>
 class SigmaClass {
 	public:
+		using InternalSet = std::bitset<MAX_MAIN_SET_SIZE>;
 		using Set = FiniteSet<T>;
+		using InternalFamily = FiniteSet<InternalSet>;
 		using Family = FiniteSet<Set>;
 
 		bool step() {
 			bool anyNew = false;
-			Family result;
+			InternalFamily result;
 			result.insert(family.begin(), family.end());
 			for (auto s1 = family.begin(); s1 != family.end(); s1++) {
-				const Set & set1 = *s1;
+				const InternalSet & set1 = *s1;
 				bool inserted;
-				std::tie(std::ignore, inserted) = result.insert(complement(set1));
+				std::tie(std::ignore, inserted) = result.insert((~set1) & mainSet);
 				anyNew |= inserted;
 				for (auto s2 = std::next(s1); s2 != family.end(); s2++) {
-					const Set & set2 = *s2;
-					if ((set1 & set2).empty()) {
+					const InternalSet & set2 = *s2;
+					if ((set1 & set2).none()) {
 						std::tie(std::ignore, inserted) = result.insert(set1 | set2);
 						anyNew |= inserted;
 					}
@@ -84,28 +89,76 @@ class SigmaClass {
 			return anyNew;
 		}
 
-		void setMainSet(Set ms) {
-			mainSet = ms;
+		void setMainSet(Set const & ms) {
+			mainSet.flip();
+			mainSetSize = ms.size();
+			mainSet <<= mainSetSize;
+			mainSet.flip();
+			int idx = 0;
+			for (T const & e : ms) {
+				toRepresentation[e] = idx;
+				idx++;
+			}
+			assert(idx==mainSetSize);
+			for (auto const & tr : toRepresentation) {
+				toElement[tr.second] = tr.first;
+			}
 		}
 
-		void setFamily(Family f) {
-			family = f;
+		void setFamily(Family const & f) {
+			family = encodeFamily(f);
 		}
 
-		Set const & getMainSet() const {
-			return mainSet;
+		Set getMainSet() const {
+			return decodeSet(mainSet);
 		}
 
-		Family const & getFamily() const {
-			return family;
+		Family getFamily() const {
+			return decodeFamily(family);
 		}
 	private:
-		Set complement(Set const & s) {
-			return mainSet-s;
+		InternalSet encodeSet(Set const & s) const {
+			InternalSet result;
+			for (T const & e : s) {
+				if (toRepresentation.count(e) == 0) {
+					std::cerr << "Element " << e << " in a set in the family, but not in the main set!" << std::endl;
+				}
+				result.set(toRepresentation.at(e));
+			}
+			return result;
 		}
 
-		Set mainSet;
-		Family family;
+		Set decodeSet(InternalSet const & is) const {
+			Set result;
+			for (int i = 0; i < mainSetSize; i++) {
+				if (is.test(i)) {
+					result.insert(toElement.at(i));
+				}
+			}
+			return result;
+		}
+
+		InternalFamily encodeFamily(Family const & f) const {
+			InternalFamily result;
+			for (Set const & s : f) {
+				result.insert(encodeSet(s));
+			}
+			return result;
+		}
+
+		Family decodeFamily(InternalFamily const & inf) const {
+			Family result;
+			for (InternalSet const & is : inf) {
+				result.insert(decodeSet(is));
+			}
+			return result;
+		}
+
+		std::map<int, T> toElement;
+		std::map<T, int> toRepresentation;
+		InternalSet mainSet;
+		int mainSetSize;
+		InternalFamily family;
 };
 
 template<typename T>
@@ -130,7 +183,9 @@ int main(int argc, char * argv[]) {
 	long long steps = 0;
 	do {
 		std::cout << "=== Step " << steps << " ===" << std::endl;
-		std::cout << json(rho.getFamily()) << std::endl;
+		auto fam = rho.getFamily();
+		std::cout << "Family size: " << fam.size() << std::endl;
+		std::cout << json(fam) << std::endl;
 		steps++;
 		if (steps > maxSteps) {
 			std::cout << "Maximum number of steps exceeded, stopping." << std::endl;
